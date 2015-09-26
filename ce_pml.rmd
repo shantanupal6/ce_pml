@@ -1,0 +1,76 @@
+---
+title: "Coursera practical machine learning -Project write up"
+author: "Shantanu Pal"
+date: "26 September 2015"
+output: html_document
+---
+First of all created a directory and set it to default directory.
+Read the CSV files from the newly created directory.
+Created a function which populates missing rate for all variables in the pml-training.csv dataset
+```{r,echo=FALSE,warning=FALSE,error=FALSE}
+library(caret)
+#setting working directory
+setwd("D:\\My Collections\\Tutorials\\course era\\Practical machine learning")
+
+basedt=read.csv("pml-training.csv",T)
+
+
+missing_rate=function(df){
+  tdf=get(df)
+  missing_cnt=data.frame(varname="",cnt=0)
+  attach(tdf);
+  for (i in 1:dim(tdf)[2])
+  {
+    assign("tvar",get(names(tdf)[i]))
+    
+    temp=data.frame(varname=names(tdf)[i],cnt=round(sum(is.na(tvar))/dim(tdf)[1],5))
+    missing_cnt=rbind(missing_cnt,temp)
+    
+    
+  }
+  detach(tdf)
+  return(missing_cnt)
+}
+
+miss_rate=missing_rate("basedt")
+
+```
+We removed the variables with missing rate greater than 25%
+```{r}
+head(miss_rate)
+drop_vars=miss_rate[miss_rate$cnt>0.25,1]
+dim(basedt)
+basedt=basedt[,!(names(basedt) %in% drop_vars)] 
+dim(basedt)
+
+```
+We checked for the variables which have zero variance or near zero variance.
+We removed all such variables which have near zero variance.
+```{r}
+
+nsv=nearZeroVar(basedt,saveMetrics = TRUE)
+nsv_rej=nsv[nsv$nzv==TRUE,]
+drop_vars=row.names(nsv_rej)
+drop_vars
+basedt1=basedt[,!(names(basedt) %in% drop_vars)]
+```
+We have split the data in training and test dataset
+```{r}
+
+trnIndx=createDataPartition(basedt1$classe,p=0.6,list=FALSE)
+training=basedt1[trnIndx,-1]
+testing=basedt1[-trnIndx,-1]
+```
+Then we tried to build a base model using rpart and compared the error rate between training and test dataset.The miss classification rate was similar in both training and test dataset but accuracy was 63% only. So we decided to use random forest.We used cross validation to train the model with 5 folds.We had allowed the alorithm to grow till 50 trees.
+
+The accuracy in both training and test(out of sample) datset is similar approx 0.01%
+```{r}
+featurePlot(x=training[,c("raw_timestamp_part_1","roll_belt","num_window")],y=training$classe,plot="pairs")
+rf_fit=train(training$classe~.,method="rf",data=training,trControl=trainControl(method="cv"),number=5,ntree=50)
+varImp(rf_fit)
+```
+We used this model for final prediction
+```{r}
+answers=predict(rf_fit,testing)
+
+```
